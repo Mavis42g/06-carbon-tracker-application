@@ -1,0 +1,281 @@
+---
+title: "Application 1 (Week 6): Data Processing (ESDS I)"
+author: "Eliza Harris"
+date: "2022-10-25"
+output: html_document
+---
+
+```{r echo=FALSE, message=FALSE}
+require(lubridate)
+require(tidyverse)
+require(purrr)
+require(raster)
+require(ncdf4)
+require(rworldmap)
+require(viridis)
+require(mapdata)
+```
+
+# 1. Basic dataset investigation in R
+
+Read in the Carbon Tracker dataset "CT2017.molefrac_glb3x2_2000-01.nc", which is a gridded dataset of mean monthly carbon dioxide mixing ratio for January 2000 produced by NOAA's Carbon Tracker program. For more information about Carbon Tracker, see the website: https://gml.noaa.gov/ccgg/carbontracker/.
+
+```{r}
+# Read in the file
+```
+
+* What variables (and what are their units) and dimensions (and what size are they) are present in this dataset?
+
+```{r}
+# Solution
+```
+
+**Variables**: *add here*
+
+**Dimensions**: *add here*
+
+* Save longitude, latitude, decimal_date and co2 as vectors/matrices. Get the fill value for CO2 and use it to replace missing values with NaN. If needed, convert units of longitude and latitude to degrees. Close the nc file and save all the variables to a list.
+
+```{r}
+# Code here to produce list of chosen variables
+```
+
+* Make two figures, one showing a global map of CO2 at the surface level, and one showing CO2 at the highest level available in this dataset. Make sure the plots show continental outlines and have titles. Hint: use the package "mapdata" to load a suitable shapefile.
+
+```{r}
+# Make figures
+```
+
+# 2. Exploratory statistics
+
+* Write a function that makes a dataframe to summarise CO2 in a certain layer by latitude band. The output dataframe should have variables min_lat and max_lat, which show the latitude range of the band, as well as mean, median, mode and standard deviation of CO2 in the band. Latitude bands should be 1 degrees wide. You should provide the function with data from a certain layer, the latitude vector or matrix.
+
+* You will need to write an extra function to calculate the mode. You will need to discretise the continuous data to be able to find a mode.
+
+```{r}
+# Mode function
+
+# Function for statistical summary by latitude band
+
+# Test the function
+```
+
+* Run your function to summarise CO2 by latitude band for the surface and the uppermost layers.
+
+```{r}
+# Run the function
+```
+
+* Plot the mean CO2 against latitude, with the standard deviation shown with error bars. Use a different colour to distinguish surface and upper layers, and include them in different subplots. In different line styles, show also the median and mode. Include a legend and whatever else is needed to make your figure easy to understand.
+
+```{r fig.dim = c(6,8)}
+# Plot the summary statistics here
+```
+
+# 3. Downscaling
+
+* Read in the CO2 timeseries from Mauna Loa that we used in the first tutorial: "co2_mlo_surface-insitu_2_3001-9999_daily.txt" and assign NaN to value < 0.
+
+```{r}
+# Read in Mauna Loa data
+```
+
+* In the Data folder, there are 6 Carbon Tracker data files (including the one we already used). Open each data file and find the CO2 value for the grid cell closest to Mauna Loa, for each of the first 20 levels. The longitude and latitude for Mauna Loa are in the mlo data file header. Save the 6 x 20 CO2 values and the 6 dates (decimal year) in a data frame. 
+
+To help you we provided the following code that you need to complete:
+```{r eval=F}
+mlo_latlon = c(...., .....)
+
+files <- list.files("Data",pattern = "CT2017.molefrac") # Find all CT2017 files
+ct_mlo_co2 <- data.frame(matrix(nrow=length(files),ncol=....)) # Create space for results
+colnames(ct_mlo_co2) <- c("date",paste0("co2_",1:20))
+for (n in seq_along(files)){ # Loop through each of the files
+  nc_data <- ....(paste0("Data/",files[n]))
+  ct_mlo_co2$date[n] <- ....(...., ".....")
+  lat <- .... (...., "....")
+  lon <- ....(...., "....")
+   
+  lat <- which.min(abs(lat-mlo_latlon[1])) 
+  lon <- which.min(abs(lon-mlo_latlon[2])) 
+  
+  co2 <- ....(...., "....")
+  ct_mlo_co2[n,paste0("co2_",1:20)] <- co2[lon,lat,1:20]
+  nc_close(nc_data)
+}
+print(ct_mlo_co2)
+```
+
+```{r}
+# Run the provided code and Read the 6 Carbon Tracker files and save MLO point data
+```
+
+* The Carbon Tracker data are monthly means. Find the mean and standard deviation of CO2 at Mauna Loa for the 6 months in the "mlo_co2" file corresponding to the Carbon Tracker data points.
+
+```{r}
+# Temporal aggregation of MLO data to match Carbon Tracker
+```
+
+* Use an apply or purrr function to find the RMSE, slope and correlation coefficient (R2) between the Mauna Loa data points and each of the Carbon Tracker levels. You'll need to write your own function to find RMSE, slope and correlation coefficient, and then "apply" this. If you cannot manage this with apply, use a loop or a simpler method.
+
+```{r}
+# Compare CO2 between MLO and CT
+```
+
+* Make a figure with three subplots showing the rmse, slope and r2 of the comparison between Carbon Tracker levels and the Mauna Loa data. Use the plot to determine which level fits the data best.
+
+```{r fig.dim = c(6,8)}
+# Figure comparing MLO/CT
+```
+
+*Solution: Which level(s) show the closest match?*
+
+* The Carbon Tracker variable "geopotential height" gives the level height boundaries in each run of the model that generated the data. There are 25 levels, but gph has 26 values, because it contains boundaries between the levels. Find the mean geopotential height (average of upper and lower boundaries) for the MLO grid cell for the first 20 levels for each of the 6 dates and save as a data frame. You can reuse and adapt the code that you used to retrieve CO2 for each grid cell/date.
+
+To help you we provided the following code that you need to complete:
+```{r,eval=FALSE}
+ct_mlo_gph <- data.frame(matrix(nrow=length(files),ncol=....)) # Create space for results
+colnames(ct_mlo_gph) <- c("date",paste0("gph_",1:20))
+
+for (n in seq_along(files)){ # Loop through each of the files
+  nc_data <- ....(paste0("Data/",files[n]))
+  ct_mlo_gph$date[n] <- ....(nc_data, "decimal_date")
+  
+  lat <- ....(...., "....")
+  lon <- ....(...., "....")
+   
+  lat <- which.min(abs(lat-mlo_latlon[1])) 
+  lon <- which.min(abs(lon-mlo_latlon[2])) 
+  
+  gph <- ....(...., "....")
+  ct_mlo_gph[n,paste0("gph_",1:20)] <- (gph[lon,lat,1:20] + gph[lon,lat,2:21])/2
+  nc_close(nc_data)
+}
+print(ct_mlo_gph)
+```
+
+
+```{r}
+# Retrieve the Carbon Tracker geopotential height
+```
+
+* What are the heights of the layers which best matched the Mauna Loa data? Which layer is closest to the actual height of Mauna Loa observatory (see the metadata in the file)? What does this tell you about the veracity and representativeness of each data type?
+
+*Solution: Which heights/layers match most closely?*
+
+# 4. Fluxes and growth
+
+Carbon Tracker does not just produce CO2 mixing ratio data for different levels, but also estimates of the CO2 flux from each grid cell. Read in the Carbon Tracker flux data (CT2017.flux1x1-monthly.nc): What variables and dimensions does this dataset have in comparison to the mixing ratio data?
+
+```{r}
+# Get the Carbon Tracker flux data 
+```
+
+*Solution: Describe differences in variables and dimensions between the Carbon Tracker flux and mixing ratio data*
+
+* Find the total global flux for each timestep for the four different components. Put this in a data frame with columns: time, bio, ocn, fossil, fire, and then close the nc file. Sum the four columns to add a "total" flux column.
+
+* To find the global flux, you will need to multiply the flux in each grid cell (mol m-2 s-1) by the area of the grid cell in m2, to get the flux for a grid cell in mol s-1. Then you can sum the grid cell fluxes to find the global flux in mol s-1. To do this, you will need to find the areas of the grid cells: Convert any of the data sets from the flux file to a raster (r) using the lon and lat in the flux file, and use the area(r) function (from the raster package) to find grid cell area as a raster. The area of each grid cell will be in km2, so you need to convert to m2.
+
+* The global flux is not usually reported in mol s-1, but in Pg-C y-1. Convert moles to Pg (10^15 grams) based on the mass of carbon (12.011 g mol-1), and convert from s-1 to y-1, so that your global fluxes are in Pg-C y-1.
+
+```{r}
+# Find the global flux using the unit conversions described
+# Get the data and set up the results space
+# Find the area of the grid cells
+# Loop through each timestep and sum fluxes
+# Convert from mol s-1 to Pg y-1.
+
+```
+
+* Create a second dataframe with the same format, but including the annual mean fluxes. The previous fluxes are monthly means but in units of Pg y-1, so you average the monthly fluxes rather than summing them to find the annual mean fluxes. You do not need to account for different months being different lengths.
+
+```{r}
+# Find the annual flux
+```
+
+* Make a plot with two subplots showing the four flux components (use four colours) and the total fluxes (black, thicker line). The upper plot should show monthly fluxes and the lower plot annual fluxes. Include a legend, axes labels, and anything else needed to make your figure easy to understand. 
+
+```{r fig.dim = c(6,8)}
+# Plot the fluxes
+```
+
+* We will now look at **anomalies** in the fluxes, ie. differences from the mean. For each of the flux components and for the total flux, find the annual flux anomalies, eg. the annual fluxes minus the mean flux over the whole time period. Plot two subplots using the same colours/lines as the previous plot; the upper panel should show the annual fluxes (identical to the previous lower subplot) and the lower panel should show the anomalies.
+
+```{r fig.dim = c(6,8)}
+# Find the plot the flux anomalies
+```
+
+* We can see that the total anomaly moves from negative to positive over the time series, clearly showing that the total fluxes are increasing. Looking at the anomalies in individual sources, we can see that fossil fuels are the primary driver of the increase in total flux, while year-to-year variability in the biological flux drives year-to-year variability in total flux. In the final section, we will relate this to the trend in CO2 mixing ratio measured at Mauna Loa.*Did you see this in your output?*
+
+# 5. Modelling CO2 growth rate as a function of flux
+
+* Use the Mauna Loa CO2 timeseries (the measured timeseries, not the timeseries downscaled from Carbon Tracker) to find: i) annual mean CO2, and ii) CO2 growth rate per year (in ppm per year). Plot these in two subplots. The growth rate should be the difference in CO2 (ppm) between subsequent years.
+
+```{r fig.dim = c(6,8)}
+# Aggregate MLO data to annual means and find the growth rate each year
+```
+
+* Find the uncertainty in annual mean CO2 growth rate: First, find the uncertainty (standard deviation) of the measurements in each year, and then use error propagation to find the uncertainty of the growth rate, ie. the difference between subsequent years.
+
+```{r}
+# Find the uncertainty in annual CO2 and in growth rate
+```
+
+* Now we will return to the annual mean fluxes (total and for the four categories). Find the uncertainty, as the standard deviation of monthly fluxes within each year. Use error propagation to find the uncertainty in the flux anomalies.
+
+```{r}
+# Uncertainty in the annual fluxes and anomalies
+```
+
+* Make a plot with three subplots. In the upper plot: flux anomalies (four cats + total) with error bars on the total only; in the middle plot: growth rate of CO2 with error bars; in the bottom plot: total flux anomalies vs. growth rate of CO2 for the years both are available, with points coloured by year. Include legend, labels, etc. as appropriate.
+
+```{r fig.dim = c(5,8)}
+# Plot the growth rate and flux anomalies
+```
+
+* We can see that the flux anomaly and the growth rate are strongly correlated, as we would expect: When fluxes are high, CO2 grows strongly. The exact relationship between fluxes and growth depends on many factors, such as sinks, transport patterns, and atmospheric mixing. However, we will simply set up a model stating that: growth = *f*(flux_anom), ie. growth is a function of flux, and more specifically, **growth = (flux_anom x conversion_factor) + base_growth**. The intercept base_growth is the growth in CO2 expected for an average annual flux for the period we are considering, and conversion factor accounts for all the atmospheric processes linking flux anomalies to changes in growth. 
+
+* Use a linear regression to find values for conversion_factor and base_growth without considering uncertainty in any data sources. Report your findings, as well as the statistical strength (eg. R2, RMSE) of the model.
+
+```{r}
+# Investigate the linear relationship with lm()
+```
+*Describe the linear relationship*
+
+*Describe the strength of the model*
+
+* Copy your MCMC function from the week 4 exercise so it can be used here. Normally we would import a large function from an external package or script, but for simplicity, here we will just paste the function.
+
+```{r echo=FALSE}
+# Copy your MCMC function
+```
+
+* Run the MCMC with step length of 0.5 and 10000 iterations, for the linear relationship between flux and growth described above. Use the estimates of slope and intercept from the linear fit as a starting point for the MCMC, and assign them both an uncertainty of 0.2. Assign the relative model uncertainty as 0.1.
+
+* The standard deviation in flux and growth based on the monthly measurements in each annual period are high, particularly for the fluxes, which are highly variable due to seasonal cycles. What impact does this have on the MCMC? Is it able to run correctly?
+
+
+```{r}
+# Run the MCMC
+```
+
+*Describe the performance of the MCMC.*
+
+* The MCMC was strongly affected by the uncertainty. Both uncertainties are too high: the seasonal cycle impacts the standard deviation - however, this is not uncertainty but true variability. We would need to consider the actual uncertainty in annual growth and flux by first removing the mean seasonality. This is beyond the scope of this exercise. In this case, with poorly quantified uncertainty, the MCMC cannot perform correctly, and the linear model describes our results adequately. 
+
+# 6. Summary
+
+In this application, you have:
+
+* Imported and investigated datasets with .nc and .csv formats, describing CO2 mixing ratio and flux
+
+* Explored the datasets with a variety of statistical approaches
+
+* Downscaled global data for comparison to point data and aggregated to compare data with differing temporal resolutions
+
+* Used a simple model to describe the link between fluxes and CO2 growth rate
+
+* Observed how an MCMC can be used to optimize a model, but cannot perform correctly without an appropriate description of uncertainty in all parameters
+
+Throughout this application, you have practiced the key R skills of data organisation, plotting, and function creation. These skills are a core part of programming for data science and can be applied to any problem you will encounter. Good luck with your future data science projects!
+
