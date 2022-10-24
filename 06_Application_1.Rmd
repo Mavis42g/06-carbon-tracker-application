@@ -48,7 +48,7 @@ Read in the Carbon Tracker dataset "CT2017.molefrac_glb3x2_2000-01.nc", which is
 
 # 2. Exploratory statistics
 
-* Write a function that makes a dataframe to summarise CO2 in a certain layer by latitude band. The output dataframe should have variables min_lat and max_lat, which show the latitude range of the band, as well as mean, median, mode and standard deviation of CO2 in the band. Latitude bands should be 1 degrees wide. You should provide the function with data from a certain layer, the latitude vector or matrix.
+* Write a function that makes a dataframe to summarise CO2 in a certain layer by latitude band. The output dataframe should have variables min_lat and max_lat, which show the latitude range of the band, as well as mean, median, mode and standard deviation of CO2 in the band. Latitude bands should be 10 degrees wide, eg. -90 to -80, -80 to -70, and so on. You should provide the function with data from a certain layer, the latitude vector or matrix.
 
 * You will need to write an extra function to calculate the mode. You will need to discretise the continuous data to be able to find a mode.
 
