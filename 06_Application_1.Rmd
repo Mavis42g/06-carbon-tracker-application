@@ -48,7 +48,7 @@ Read in the Carbon Tracker dataset "CT2017.molefrac_glb3x2_2000-01.nc", which is
 
 # 2. Exploratory statistics
 
-* Write a function that makes a dataframe to summarise CO2 in a certain layer by latitude band. The output dataframe should have variables min_lat and max_lat, which show the latitude range of the band, as well as mean, median, mode and standard deviation of CO2 in the band. Latitude bands should be 10 degrees wide, eg. -90 to -80, -80 to -70, and so on. You should provide the function with data from a certain layer, the latitude vector or matrix.
+* Write a function that makes a dataframe to summarise CO2 for every latitude given (-89, -87, ..., 89). The output dataframe should have variables lat, which shows the latitude, as well as mean, median, mode and standard deviation of CO2 in this latitude. You should provide the function with data from a certain layer and the latitude vector or matrix.
 
 * You will need to write an extra function to calculate the mode. You will need to discretise the continuous data to be able to find a mode.
 
@@ -86,11 +86,11 @@ To help you we provided the following code that you need to complete:
 ```{r eval=F}
 mlo_latlon = c(...., .....)
 
-files <- list.files("Data",pattern = "CT2017.molefrac") # Find all CT2017 files
+files <- list.files("data",pattern = "CT2017.molefrac") # Find all CT2017 files
 ct_mlo_co2 <- data.frame(matrix(nrow=length(files),ncol=....)) # Create space for results
 colnames(ct_mlo_co2) <- c("date",paste0("co2_",1:20))
 for (n in seq_along(files)){ # Loop through each of the files
-  nc_data <- ....(paste0("Data/",files[n]))
+  nc_data <- ....(paste0("data/",files[n]))
   ct_mlo_co2$date[n] <- ....(...., ".....")
   lat <- .... (...., "....")
   lon <- ....(...., "....")
@@ -137,7 +137,7 @@ ct_mlo_gph <- data.frame(matrix(nrow=length(files),ncol=....)) # Create space fo
 colnames(ct_mlo_gph) <- c("date",paste0("gph_",1:20))
 
 for (n in seq_along(files)){ # Loop through each of the files
-  nc_data <- ....(paste0("Data/",files[n]))
+  nc_data <- ....(paste0("data/",files[n]))
   ct_mlo_gph$date[n] <- ....(nc_data, "decimal_date")
   
   lat <- ....(...., "....")
