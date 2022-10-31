@@ -1,6 +1,6 @@
 ---
 title: "Application 1 (Week 6): Data Processing (ESDS I)"
-author: "Eliza Harris"
+author: "Ruoyi Chen"
 date: "2022-10-25"
 output: html_document
 ---
@@ -22,28 +22,58 @@ Read in the Carbon Tracker dataset "CT2017.molefrac_glb3x2_2000-01.nc", which is
 
 ```{r}
 # Read in the file
+nc_data = nc_open('data/CT2017.molefrac_glb3x2_2000-01.nc')
 ```
 
 * What variables (and what are their units) and dimensions (and what size are they) are present in this dataset?
 
 ```{r}
 # Solution
+print(nc_data)
 ```
 
-**Variables**: *add here*
+**Variables**: *air_mass (kg), blh (m), co2 (micromol mol-1), decimal_date (years), gph (m), orography (m^2/s^2), pressure (Pa), specific_humidity (kg kg-1), temperature (Kelvin), time_components (none), u (m/s), v (m/s)*
 
-**Dimensions**: *add here*
+**Dimensions**: 
+*time (1),  level (25), latitude (90), longitude (120), boundary (26), calendar_components (6) *
 
 * Save longitude, latitude, decimal_date and co2 as vectors/matrices. Get the fill value for CO2 and use it to replace missing values with NaN. If needed, convert units of longitude and latitude to degrees. Close the nc file and save all the variables to a list.
 
 ```{r}
 # Code here to produce list of chosen variables
+#get data
+longitude <- ncvar_get(nc_data, "longitude") # degrees_east
+latitude <- ncvar_get(nc_data, "latitude") # degrees_north
+decimal_date <- ncvar_get(nc_data, "decimal_date") 
+co2 <- ncvar_get(nc_data, "co2")
+fillvalue = ncatt_get(nc_data, "co2", "_FillValue")
+
+#check missing values
+sum(co2 == fillvalue$value) # 0
+co2[co2 == fillvalue$value] = NaN
+
+# save to list
+nc_close(nc_data)
+co2_0001 = list(lon = longitude, lat = latitude, date = decimal_date, co2 = co2)
+#check dimensions
+dim(co2_0001$co2) #120  90  25
 ```
 
 * Make two figures, one showing a global map of CO2 at the surface level, and one showing CO2 at the highest level available in this dataset. Make sure the plots show continental outlines and have titles. Hint: use the package "mapdata" to load a suitable shapefile.
 
 ```{r}
 # Make figures
+r_1 = raster(t(co2[,,1]), xmn=min(co2_0001$lon), xmx=max(co2_0001$lon), ymn=min(co2_0001$lat), ymx=max(co2_0001$lat), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+r_25 = raster(t(co2[,,25]), xmn=min(co2_0001$lon), xmx=max(co2_0001$lon), ymn=min(co2_0001$lat), ymx=max(co2_0001$lat), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+r_1 = flip(r_1, direction='y')
+r_25 = flip(r_25, direction='y')
+par(mar=c(2,4,1,1)) 
+par(mfrow=c(2,1))
+plot(r_1,ylim=c(-89,89),xlim=c(-178.5,178.5),main="surface level CO2")
+plot(coastsCoarse,add=TRUE,col='black') 
+plot(r_25,ylim=c(-89,89),xlim=c(-178.5,178.5),main="highest level CO2")
+plot(coastsCoarse,add=TRUE,col='black') 
+
 ```
 
 # 2. Exploratory statistics
@@ -54,22 +84,108 @@ Read in the Carbon Tracker dataset "CT2017.molefrac_glb3x2_2000-01.nc", which is
 
 ```{r}
 # Mode function
+# ===== the "manual" way =========
+# mode_func = function(input){
+#   tmp_sort = sort(input) # sort the values in input
+#   make_class = seq(min(input), max(input), length = 10) # make 10 classes to calculate frequency
+#   classmat = matrix(0, 2, 11)
+#   classmat[1, 1:10] = make_class
+#   classmat[1, 11] = 1000
+#   cn = 0
+#   for (i in 1:length(input)){ # filling the frequency
+#     if (tmp_sort[i] %in% list(classmat[1, cn-1], classmat[1, cn])){
+#       classmat[2, cn-1] = classmat[2, cn-1] + 1
+#       i = i + 1
+#     }
+#     else {
+#       cn = cn + 1
+#       classmat[2, cn-1] = classmat[2, cn-1] + 1
+#       i = i + 1
+#     }
+#   }
+#   f1 = classmat[2, which.max(classmat[2,])]
+#   f0 = classmat[2, which.max(classmat[2,]) - 1]
+#   f2 = classmat[2, which.max(classmat[2,]) + 1]
+#   l = classmat[1, which.max(classmat[2,])]
+#   intv = make_class[2] - make_class[2]
+#   z = l + intv * (f1 - f0) / (2*f1 - f0 - f2) # mode equation
+#   result = list(z)
+#   return(result)
+# }
+# ===== the "manual" way =========
+
+mode_func = function(input){
+  uniqv <- unique(input)
+  uniqv[which.max(tabulate(match(input, uniqv)))]
+}
 
 # Function for statistical summary by latitude band
+lat_stat = function(level, lat_vec){
+  # create vector space for stat result
+  tmp_mean = seq(0, 0, length = length(lat_vec))
+  tmp_median = seq(0, 0, length = length(lat_vec))
+  tmp_mode = seq(0, 0, length = length(lat_vec))
+  tmp_sd = seq(0, 0, length = length(lat_vec))
+  tmp_lat = seq(0, 0, length = length(lat_vec))
+  # fill in the stats
+  #(latvec(i)+91)/2 to change latitude value to its row number
+  for (i in 1: length(lat_vec)) {
+  tmp_co2 = as.vector(co2[, (lat_vec[i]+91)/2, level])
+  tmp_mean[i] = mean(tmp_co2)
+  tmp_median[i] = median(tmp_co2)
+  tmp_mode[i] = mode_func(tmp_co2)
+  tmp_sd[i] = sd(tmp_co2)
+  tmp_lat[i] = lat_vec[i]
+  }
+  # combine into df
+  lat_df = data.frame(lat = tmp_lat, mean = tmp_mean, median = tmp_median, mode = tmp_mode, sd = tmp_sd)
+  
+  return(lat_df)
+}
 
 # Test the function
+lat_10_45 = lat_stat(10, 45)
+lat_1_multi = lat_stat(1, c(10, -35, 80))
+print(lat_10_45)
+print(lat_1_multi)
+
 ```
 
 * Run your function to summarise CO2 by latitude band for the surface and the uppermost layers.
 
 ```{r}
 # Run the function
+lat_surface = lat_stat(1, latitude)
+lat_uppermost = lat_stat(25, latitude)
 ```
 
 * Plot the mean CO2 against latitude, with the standard deviation shown with error bars. Use a different colour to distinguish surface and upper layers, and include them in different subplots. In different line styles, show also the median and mode. Include a legend and whatever else is needed to make your figure easy to understand.
 
 ```{r fig.dim = c(6,8)}
 # Plot the summary statistics here
+par(mar=c(2,4,1,1)) 
+par(mfrow=c(3,2))
+# mean
+plot(latitude, lat_surface$mean, ylab = "surface mean", pch = 20, col = "royalblue", ylim = c(364, 381))
+arrows(x0=latitude, y0=lat_surface$mean-lat_surface$sd, x1=latitude, y1=lat_surface$mean+lat_surface$sd, code=3, col="royalblue", lwd=0.3, angle=90, length=0.05)
+plot(latitude, lat_uppermost$mean, ylab = "uppermost mean", pch = 20, col = "palevioletred", ylim = c(360, 361))
+arrows(x0= latitude, y0=lat_uppermost$mean-lat_uppermost$sd, x1=latitude, y1=lat_uppermost$mean+lat_uppermost$sd, code=3, col="palevioletred", lwd=0.3, angle=90, length=0.05)
+legend("topright", legend=c("surface", "uppermost"), col=c("royalblue", "palevioletred"), pch = 20, cex= 0.5)
+
+# median
+plot(latitude, lat_surface$median, ylab = "surface median", pch = 18, col = "royalblue", ylim = c(364, 381))
+arrows(x0=latitude, y0=lat_surface$median-lat_surface$sd, x1=latitude, y1=lat_surface$median+lat_surface$sd, code=3, col="royalblue", lwd=0.3, angle=90, length=0.05)
+plot(latitude, lat_uppermost$median, ylab = "uppermost median", pch = 18, col = "palevioletred", ylim = c(360, 361))
+arrows(x0=latitude, y0=lat_uppermost$median-lat_uppermost$sd, x1=latitude, y1=lat_uppermost$median+lat_uppermost$sd, code=3, col="palevioletred", lwd=0.3, angle=90, length=0.05)
+legend("topright", legend=c("surface", "uppermost"), col=c("royalblue", "palevioletred"), pch = 18, cex= 0.5)
+
+# mode
+plot(latitude, lat_surface$mode, ylab = "surface mode", pch = 17, col = "royalblue", ylim = c(364, 381))
+arrows(x0=latitude, y0=lat_surface$mode-lat_surface$sd, x1=latitude, y1=lat_surface$mode+lat_surface$sd, code=3, col="royalblue", lwd=0.3, angle=90, length=0.05)
+plot(latitude, lat_uppermost$mode, ylab = "uppermost mode", pch = 17, col = "palevioletred", ylim = c(360, 361))
+arrows(x0=latitude, y0=lat_uppermost$mode-lat_uppermost$sd, x1=latitude, y1=lat_uppermost$mode+lat_uppermost$sd, code=3, col="palevioletred", lwd=0.3, angle=90, length=0.05)
+legend("topright", legend=c("surface", "uppermost"), col=c("royalblue", "palevioletred"), pch = 17, cex= 0.5)
+
 ```
 
 # 3. Downscaling
@@ -78,27 +194,31 @@ Read in the Carbon Tracker dataset "CT2017.molefrac_glb3x2_2000-01.nc", which is
 
 ```{r}
 # Read in Mauna Loa data
+data_mlo = read.delim("data/co2_mlo_surface-insitu_2_3001-9999_daily.txt", sep = " ", comment.char = '#')
+data_mlo$value[data_mlo$value<0] <- NaN
+
 ```
 
 * In the Data folder, there are 6 Carbon Tracker data files (including the one we already used). Open each data file and find the CO2 value for the grid cell closest to Mauna Loa, for each of the first 20 levels. The longitude and latitude for Mauna Loa are in the mlo data file header. Save the 6 x 20 CO2 values and the 6 dates (decimal year) in a data frame. 
 
 To help you we provided the following code that you need to complete:
 ```{r eval=F}
-mlo_latlon = c(...., .....)
+# filling code
+mlo_latlon = c(19.536, -155.576)
 
 files <- list.files("data",pattern = "CT2017.molefrac") # Find all CT2017 files
-ct_mlo_co2 <- data.frame(matrix(nrow=length(files),ncol=....)) # Create space for results
+ct_mlo_co2 <- data.frame(matrix(nrow = length(files),ncol = 21)) # Create space for results
 colnames(ct_mlo_co2) <- c("date",paste0("co2_",1:20))
 for (n in seq_along(files)){ # Loop through each of the files
-  nc_data <- ....(paste0("data/",files[n]))
-  ct_mlo_co2$date[n] <- ....(...., ".....")
-  lat <- .... (...., "....")
-  lon <- ....(...., "....")
+  nc_data <- nc_open(paste0("data/",files[n])) # open
+  ct_mlo_co2$date[n] <- ncvar_get(nc_data, "decimal_date") # fill in date
+  lat <- ncvar_get(nc_data, "latitude") 
+  lon <- ncvar_get(nc_data, "longitude") 
    
-  lat <- which.min(abs(lat-mlo_latlon[1])) 
+  lat <- which.min(abs(lat-mlo_latlon[1])) # closest coord
   lon <- which.min(abs(lon-mlo_latlon[2])) 
   
-  co2 <- ....(...., "....")
+  co2 <- ncvar_get(nc_data, "co2") 
   ct_mlo_co2[n,paste0("co2_",1:20)] <- co2[lon,lat,1:20]
   nc_close(nc_data)
 }
@@ -107,46 +227,111 @@ print(ct_mlo_co2)
 
 ```{r}
 # Run the provided code and Read the 6 Carbon Tracker files and save MLO point data
+mlo_latlon = c(19.536, -155.576)
+
+files <- list.files("data",pattern = "CT2017.molefrac") # Find all CT2017 files
+ct_mlo_co2 <- data.frame(matrix(nrow = length(files),ncol = 21)) # Create space for results
+colnames(ct_mlo_co2) <- c("date",paste0("co2_",1:20))
+for (n in seq_along(files)){ # Loop through each of the files
+  nc_data <- nc_open(paste0("data/",files[n])) # open
+  ct_mlo_co2$date[n] <- ncvar_get(nc_data, "decimal_date") # fill in date
+  lat <- ncvar_get(nc_data, "latitude") 
+  lon <- ncvar_get(nc_data, "longitude") 
+   
+  lat <- which.min(abs(lat-mlo_latlon[1])) # closest coord
+  lon <- which.min(abs(lon-mlo_latlon[2])) 
+  
+  co2 <- ncvar_get(nc_data, "co2") 
+  ct_mlo_co2[n,paste0("co2_",1:20)] <- co2[lon,lat,1:20]
+  nc_close(nc_data)
+}
+print(ct_mlo_co2)
 ```
 
 * The Carbon Tracker data are monthly means. Find the mean and standard deviation of CO2 at Mauna Loa for the 6 months in the "mlo_co2" file corresponding to the Carbon Tracker data points.
 
 ```{r}
 # Temporal aggregation of MLO data to match Carbon Tracker
+  # format the date of whole df
+  data_mlo$ym <- ym(paste(data_mlo$year, data_mlo$month, sep = "-")) 
+  data_mlo$ym <- format(data_mlo$ym, "%Y-%m")
+  # aggregate by month
+  mon_means_mlo <- data.frame(matrix(nrow = 540, ncol = 2))
+  mon_means_mlo <- aggregate(data_mlo$value, list(data_mlo$ym), FUN = mean, na.rm = TRUE)
+  colnames(mon_means_mlo) <- c("ym", "mean")
+  mon_means_mlo$ym <- as.character(mon_means_mlo$ym)
+
+  mon_sd_mlo <- data.frame(matrix(nrow = 540, ncol = 2))
+  mon_sd_mlo <- aggregate(data_mlo$value, list(data_mlo$ym), FUN = sd, na.rm = TRUE)
+  colnames(mon_sd_mlo) <- c("ym", "sd")
+  mon_sd_mlo$ym <- as.character(mon_sd_mlo$ym)
+  
+dates = c("2000-01", "2002-07", "2005-01", "2007-07", "2010-01", "2012-07")
+for (i in 1:6){
+ct_mlo_co2[i, 22] <- mon_means_mlo[as.character(mon_means_mlo$ym) == dates[i], 2]
+ct_mlo_co2[i, 23] <- mon_sd_mlo[as.character(mon_sd_mlo$ym) == dates[i], 2]
+}
+colnames(ct_mlo_co2) <- c("date",paste0("co2_",1:20), "mean", "sd")
+
 ```
 
 * Use an apply or purrr function to find the RMSE, slope and correlation coefficient (R2) between the Mauna Loa data points and each of the Carbon Tracker levels. You'll need to write your own function to find RMSE, slope and correlation coefficient, and then "apply" this. If you cannot manage this with apply, use a loop or a simpler method.
 
 ```{r}
 # Compare CO2 between MLO and CT
+
+find_stat = function(input){
+  mod = lm(ct_mlo_co2$mean ~ input)
+  slope = summary(mod)$coefficients[2,1]
+  r2 = summary(mod)$r.squared
+  rmse = sqrt(mean(ct_mlo_co2$mean - input)^2)
+  tmp_stat = c(slope, r2, rmse)
+  return(tmp_stat)
+}
+
+compare_mat = matrix(0, 20, 3)
+compare_mat = apply(ct_mlo_co2[, 2:21], 2, FUN = find_stat)
+
+
 ```
 
 * Make a figure with three subplots showing the rmse, slope and r2 of the comparison between Carbon Tracker levels and the Mauna Loa data. Use the plot to determine which level fits the data best.
 
 ```{r fig.dim = c(6,8)}
 # Figure comparing MLO/CT
+par(mar=c(2,4,1,1)) 
+par(mfrow=c(3, 1))
+plot(1:20, compare_mat[1,], ylab = "slope", pch = 20)
+abline(h=1, col = "red")
+abline(v=16, col = "blue")
+plot(1:20, compare_mat[2,], ylab = "r2", pch = 20)
+abline(v=16, col = "blue")
+plot(1:20, compare_mat[3,], ylab = "RMSE", pch = 20)
+abline(v=16, col = "blue")
+
 ```
 
 *Solution: Which level(s) show the closest match?*
+*level 16 shows the closest match*
 
 * The Carbon Tracker variable "geopotential height" gives the level height boundaries in each run of the model that generated the data. There are 25 levels, but gph has 26 values, because it contains boundaries between the levels. Find the mean geopotential height (average of upper and lower boundaries) for the MLO grid cell for the first 20 levels for each of the 6 dates and save as a data frame. You can reuse and adapt the code that you used to retrieve CO2 for each grid cell/date.
 
 To help you we provided the following code that you need to complete:
 ```{r,eval=FALSE}
-ct_mlo_gph <- data.frame(matrix(nrow=length(files),ncol=....)) # Create space for results
+ct_mlo_gph <- data.frame(matrix(nrow=length(files),ncol=21)) # Create space for results
 colnames(ct_mlo_gph) <- c("date",paste0("gph_",1:20))
 
 for (n in seq_along(files)){ # Loop through each of the files
-  nc_data <- ....(paste0("data/",files[n]))
-  ct_mlo_gph$date[n] <- ....(nc_data, "decimal_date")
+  nc_data <- nc_open(paste0("data/",files[n]))
+  ct_mlo_gph$date[n] <- ncvar_get(nc_data, "decimal_date")
   
-  lat <- ....(...., "....")
-  lon <- ....(...., "....")
+  lat <- ncvar_get(nc_data, "latitude") 
+  lon <- ncvar_get(nc_data, "longitude") 
    
   lat <- which.min(abs(lat-mlo_latlon[1])) 
   lon <- which.min(abs(lon-mlo_latlon[2])) 
   
-  gph <- ....(...., "....")
+  gph <- ncvar_get(nc_data, "gph")
   ct_mlo_gph[n,paste0("gph_",1:20)] <- (gph[lon,lat,1:20] + gph[lon,lat,2:21])/2
   nc_close(nc_data)
 }
@@ -156,11 +341,34 @@ print(ct_mlo_gph)
 
 ```{r}
 # Retrieve the Carbon Tracker geopotential height
+ct_mlo_gph <- data.frame(matrix(nrow=length(files),ncol=21)) # Create space for results
+colnames(ct_mlo_gph) <- c("date",paste0("gph_",1:20))
+
+for (n in seq_along(files)){ # Loop through each of the files
+  nc_data <- nc_open(paste0("data/",files[n]))
+  ct_mlo_gph$date[n] <- ncvar_get(nc_data, "decimal_date")
+  
+  lat <- ncvar_get(nc_data, "latitude") 
+  lon <- ncvar_get(nc_data, "longitude") 
+   
+  lat <- which.min(abs(lat-mlo_latlon[1])) 
+  lon <- which.min(abs(lon-mlo_latlon[2])) 
+  
+  gph <- ncvar_get(nc_data, "gph")
+  ct_mlo_gph[n,paste0("gph_",1:20)] <- (gph[lon,lat,1:20] + gph[lon,lat,2:21])/2
+  nc_close(nc_data)
+}
+print(ct_mlo_gph)
+
 ```
 
 * What are the heights of the layers which best matched the Mauna Loa data? Which layer is closest to the actual height of Mauna Loa observatory (see the metadata in the file)? What does this tell you about the veracity and representativeness of each data type?
 
 *Solution: Which heights/layers match most closely?*
+*heights of layer best match MLO: layer 16, 12626.31 12781.34 12731.93 12773.76 12825.15 12746.98, mean = 12747.58, unit = m*
+*Mauna Loa observatory actual height = 3397 m. So layer 9 is closest to the actual height.*
+*Down-scaling the coarse scale data from the CarbonTracker decreases the veracity and cause deviation in representing certain dimension-specific information, while the point measurement from MLO observatory render better veracity for the in situ information.*
+
 
 # 4. Fluxes and growth
 
@@ -168,9 +376,18 @@ Carbon Tracker does not just produce CO2 mixing ratio data for different levels,
 
 ```{r}
 # Get the Carbon Tracker flux data 
+nc_flux = nc_open('data/CT2017.flux1x1-monthly.nc')
+print(nc_flux)
 ```
 
 *Solution: Describe differences in variables and dimensions between the Carbon Tracker flux and mixing ratio data*
+*flux data variables: decimal_time[time] (years), bio_flux_opt[longitude,latitude,time] (mol m-2 s-1),*
+*ocn_flux_opt[longitude,latitude,time] (mol m-2 s-1), fossil_flux_imp[longitude,latitude,time] (mol m-2 s-1),*
+*fire_flux_imp[longitude,latitude,time] (mol m-2 s-1).*
+
+*flux data dimentions:  longitude Size:360 ,  latitude Size:180 ,  time Size:204,  time_components Size:6.*
+
+*So the variables are different and flux data has less variables which mainly focus on fluxes. The dimensions are less for flux data than mixing ratio data, and the sizes are different even for same dimension names.*
 
 * Find the total global flux for each timestep for the four different components. Put this in a data frame with columns: time, bio, ocn, fossil, fire, and then close the nc file. Sum the four columns to add a "total" flux column.
 
@@ -181,9 +398,34 @@ Carbon Tracker does not just produce CO2 mixing ratio data for different levels,
 ```{r}
 # Find the global flux using the unit conversions described
 # Get the data and set up the results space
+time <- ncvar_get(nc_flux, "decimal_time")
+bio <- ncvar_get(nc_flux, "bio_flux_opt")
+ocn <- ncvar_get(nc_flux, "ocn_flux_opt")
+fos <- ncvar_get(nc_flux, "fossil_flux_imp")
+fir <- ncvar_get(nc_flux, "fire_flux_imp")
+# set results space in df
+fluxdf = data.frame(matrix(0, 204, 1))
+fluxdf[[1]] = time
 # Find the area of the grid cells
+lat <- ncvar_get(nc_flux, "latitude")
+lon <- ncvar_get(nc_flux, "longitude")
+r_bio = raster(t(bio[,,1]), xmn=min(lon), xmx=max(lon), ymn=min(lat), ymx=max(lat), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+area(r_bio)
+#resolution : 0.9972222, 0.9944444  (x, y)
+#area = 0.9916820323 km^2 = 0.9916820323*10^(6) m^2
+grid_area = 0.9916820323*10^(6)
 # Loop through each timestep and sum fluxes
+for (i in 1:length(time)){ # unit = mol s-1 now
+  fluxdf$bio[i] = sum(bio[,,i]*grid_area)
+  fluxdf$ocn[i] = sum(ocn[,,i]*grid_area)
+  fluxdf$fos[i] = sum(fos[,,i]*grid_area)
+  fluxdf$fir[i] = sum(fir[,,i]*grid_area)
+  fluxdf$global[i] = sum(fluxdf[i, 2:5])
+}
+
 # Convert from mol s-1 to Pg y-1.
+fluxdf[2:6] = fluxdf[2:6] * 12.011 / 10 ^ 15* 60 * 60 * 24 * 365
+
 
 ```
 
@@ -191,21 +433,80 @@ Carbon Tracker does not just produce CO2 mixing ratio data for different levels,
 
 ```{r}
 # Find the annual flux
+ym = ym("1999-12")+months(1:204)
+fluxdf$ym = format(ym, "%Y")
+ann_fluxdf = data.frame(matrix(0, 17, 1))
+ann_fluxdf = aggregate(fluxdf, list(fluxdf$ym), FUN = mean, na.rm = TRUE)
 ```
 
 * Make a plot with two subplots showing the four flux components (use four colours) and the total fluxes (black, thicker line). The upper plot should show monthly fluxes and the lower plot annual fluxes. Include a legend, axes labels, and anything else needed to make your figure easy to understand. 
 
 ```{r fig.dim = c(6,8)}
 # Plot the fluxes
+#all values times 10^4
+par(mar=c(2,4,1,1)) 
+par(mfrow=c(2, 1))
+#monthly
+plot(fluxdf$matrix.0..204..1., fluxdf$bio*10^4, pch = 21, col = "darkgreen", ylim = c(-75, 50), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(fluxdf$matrix.0..204..1., fluxdf$ocn*10^4, pch = 21, col = "darkslateblue", ylim = c(-75, 50), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(fluxdf$matrix.0..204..1., fluxdf$fos*10^4, pch = 21, col = "cornsilk4", ylim = c(-75, 50), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(fluxdf$matrix.0..204..1., fluxdf$fir*10^4, pch = 21, col = "darkred", ylim = c(-75, 50), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(fluxdf$matrix.0..204..1., fluxdf$global*10^4, pch = 20, col = "black", ylim = c(-75, 50), ylab = "monthly fluxes (*10^4)", cex =0.6)
+legend("bottomright", legend=c("bio", "ocn", "fos", "fir", "global"), col = c("darkgreen", "darkslateblue", "cornsilk4", "darkred", "black"), pch = c(21,21,21,21,20), cex = 0.3)
+
+#annual
+plot(ann_fluxdf$Group.1, ann_fluxdf$bio*10^4, pch = 21, col = "darkgreen", ylim = c(-10,10), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$ocn*10^4, pch = 21, col = "darkslateblue", ylim = c(-10,10), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$fos*10^4, pch = 21, col = "cornsilk4", ylim = c(-10,10), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$fir*10^4, pch = 21, col = "darkred", ylim = c(-10,10), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$global*10^4, pch = 20, col = "black", ylim = c(-10,10), ylab = "annual fluxes (*10^4)", cex =0.6)
+legend("bottomright", legend=c("bio", "ocn", "fos", "fir", "global"), col = c("darkgreen", "darkslateblue", "cornsilk4", "darkred", "black"), pch = c(21,21,21,21,20), cex = 0.3)
 ```
 
 * We will now look at **anomalies** in the fluxes, ie. differences from the mean. For each of the flux components and for the total flux, find the annual flux anomalies, eg. the annual fluxes minus the mean flux over the whole time period. Plot two subplots using the same colours/lines as the previous plot; the upper panel should show the annual fluxes (identical to the previous lower subplot) and the lower panel should show the anomalies.
 
 ```{r fig.dim = c(6,8)}
 # Find the plot the flux anomalies
+meanflux = c(mean(ann_fluxdf$bio), mean(ann_fluxdf$ocn), mean(ann_fluxdf$fos), mean(ann_fluxdf$fir), mean(ann_fluxdf$global))
+meanflux = meanflux*10^4
+
+par(mar=c(2,4,1,1)) 
+par(mfrow=c(2, 1))
+#annual
+plot(ann_fluxdf$Group.1, ann_fluxdf$bio*10^4, pch = 21, col = "darkgreen", ylim = c(-10,10), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$ocn*10^4, pch = 21, col = "darkslateblue", ylim = c(-10,10), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$fos*10^4, pch = 21, col = "cornsilk4", ylim = c(-10,10), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$fir*10^4, pch = 21, col = "darkred", ylim = c(-10,10), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$global*10^4, pch = 20, col = "black", ylim = c(-10,10), ylab = "annual fluxes (*10^16)", cex =0.6)
+legend("bottomright", legend=c("bio", "ocn", "fos", "fir", "global"), col = c("darkgreen", "darkslateblue", "cornsilk4", "darkred", "black"), pch = c(21,21,21,21,20), cex = 0.3)
+
+#anomalies
+plot(ann_fluxdf$Group.1, ann_fluxdf$bio*10^4-meanflux[1], pch = 21, col = "darkgreen", ylim = c(-3,3), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$ocn*10^4-meanflux[2], pch = 21, col = "darkslateblue", ylim = c(-3,3), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$fos*10^4-meanflux[3], pch = 21, col = "cornsilk4", ylim = c(-3,3), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$fir*10^4-meanflux[4], pch = 21, col = "darkred", ylim = c(-3,3), ylab = "", cex =0.5)
+par(new = TRUE)
+plot(ann_fluxdf$Group.1, ann_fluxdf$global*10^4-meanflux[5], pch = 20, col = "black", ylim = c(-3,3), ylab = "annual fluxes anomalies(*10^4)", cex =0.6)
+abline(h=0, col = "red")
+legend("bottomright", legend=c("bio", "ocn", "fos", "fir", "global"), col = c("darkgreen", "darkslateblue", "cornsilk4", "darkred", "black"), pch = c(21,21,21,21,20), cex = 0.3)
 ```
 
-* We can see that the total anomaly moves from negative to positive over the time series, clearly showing that the total fluxes are increasing. Looking at the anomalies in individual sources, we can see that fossil fuels are the primary driver of the increase in total flux, while year-to-year variability in the biological flux drives year-to-year variability in total flux. In the final section, we will relate this to the trend in CO2 mixing ratio measured at Mauna Loa.*Did you see this in your output?*
+* We can see that the total anomaly moves from negative to positive over the time series, clearly showing that the total fluxes are increasing. Looking at the anomalies in individual sources, we can see that fossil fuels are the primary driver of the increase in total flux, while year-to-year variability in the biological flux drives year-to-year variability in total flux. In the final section, we will relate this to the trend in CO2 mixing ratio measured at Mauna Loa.*Did you see this in your output?* 
 
 # 5. Modelling CO2 growth rate as a function of flux
 
@@ -248,6 +549,163 @@ Carbon Tracker does not just produce CO2 mixing ratio data for different levels,
 
 ```{r echo=FALSE}
 # Copy your MCMC function
+#helpers
+gaussian_prob = function(x,m=0,s=1){
+  res = exp( -0.5 * ((x-m)/s)**2 )
+  if (length(res)>1){ 
+    res = mean(res)
+  }
+  return(res)
+}
+
+# create result space
+result_space = function(variable){
+variable_i = matrix(nrow=n_iterations,ncol=length(variable),-1)
+return(variable_i)
+}
+
+# compare the post and prior value with plots
+compare_post_prior = function(x,y_obs,y_mod,x_post,y_post,y_mod_post){
+  par(mar=c(2,4,1,1)) 
+  par(mfrow=c(2,1))
+ # plot x vs y, prior and post
+  plot(x,y_obs,xlab="x",ylab="y",pch=20,lty=1,col="blue",ylim=c(-25,10))
+  points(x_post,y_post,pch=20,col="cyan")
+  points(x,y_mod,pch=20,col="red")
+  points(x_post,y_mod_post,pch=20,col="magenta")
+  legend("topright", legend=c("prior","post","mod prior","mod post"),
+       col=c("blue", "cyan","red", "magenta"), lty=1, cex=0.5)
+  #  1:1 plot
+  plot(y_obs,y_mod,ylab="observations",xlab="model",pch=20,col="blue",xlim = c(-30,10), ylim=c(-30,10))
+  points(y_post,y_mod_post,pch=20,col="cyan")
+  lines(y_obs,y_obs,col="red")
+  legend("topright", legend=c("prior","post"),col=c("blue", "cyan"), lty=1, cex=0.5)
+  # print RMSE
+  rmse = (sum((y_obs-y_mod)**2)/length(y_obs))**0.5
+  print(paste0("RMSE prior: ",rmse))
+  rmse = (sum((y_post-y_mod_post)**2)/length(y_post))**0.5
+  print(paste0("RMSE posterior: ",rmse))
+}
+# Main MCMC function
+MCMC = function(
+    x, x_err,
+    y_obs, y_obs_rerr,
+    p,p_err,
+    q,q_err,
+    test_model, model_rerr,
+    step_length = NaN, 
+    n_iterations = NaN
+){
+  # Set parameters of the MCMC
+  step_length = step_length
+  n_iterations = n_iterations
+
+  # Starting point 
+  prev_x = x
+  prev_y = y_obs
+  prev_p = p
+  prev_q = q
+  prev_y_mod = test_model(x,p,q)
+
+  # Space for the results 
+  x_i = result_space(x)
+  y_est_i = result_space(y_obs)
+  y_mod_i = result_space(y_obs)
+  p_i = matrix(nrow=n_iterations, ncol=1, -1)
+  q_i = matrix(nrow=n_iterations, ncol=1, -1)
+  accepted = matrix(nrow=n_iterations, ncol=1, -1)
+  
+   # Run the MCMC
+  for (n in 1:n_iterations){
+    accept = 0
+  
+    #perturb the estimates 
+    x_i[n,] = prev_x + x_err*runif(1,-1,1)*step_length
+    y_est_i[n,] = prev_y + y_obs*y_obs_rerr*runif(1,-1,1)*step_length
+    p_i[n] = prev_p + p_err*runif(1,-1,1)*step_length
+    q_i[n] = prev_q + q_err*runif(1,-1,1)*step_length
+
+
+  
+    # acceptance
+    current_prob_x = gaussian_prob(x_i[n,],x,x_err)
+    prev_prob_x = gaussian_prob(prev_x,x,x_err)
+    if (runif(1,0,1)<current_prob_x/prev_prob_x){accept= accept + 1}
+    current_prob_y = gaussian_prob(y_est_i[n,],y_obs, y_obs * y_obs_rerr)
+    prev_prob_y = gaussian_prob(prev_y,y_obs, prev_y * y_obs_rerr)
+    if (runif(1,0,1)<current_prob_y/prev_prob_y){accept= accept + 1}
+    current_prob_p = gaussian_prob(p_i[n],p,p_err)
+    prev_prob_p = gaussian_prob(prev_p,p,p_err)
+    if (runif(1,0,1)<current_prob_p/prev_prob_p){accept= accept + 1}
+    current_prob_q = gaussian_prob(q_i[n],q,q_err)
+    prev_prob_q = gaussian_prob(prev_q,q,q_err)
+    if (runif(1,0,1)<current_prob_q/prev_prob_q){accept= accept + 1}
+
+       # run the model
+    if (accept==4){
+      y_mod_i[n,] = test_model(x_i[n,],p_i[n], q_i[n])
+      model_err = model_rerr * y_mod_i[n,]
+      prev_model_err = model_rerr * prev_y_mod
+      current_prob_m = gaussian_prob(y_mod_i[n,], y_est_i[n,],model_err)
+      prev_prob_m = gaussian_prob(prev_y_mod, y_est_i[n,],prev_model_err)
+      if (runif(1,0,1)<current_prob_m/prev_prob_m){accept= accept + 1}
+    }
+
+    # next iteration
+    if (accept==5){
+      accepted[n] = 1
+      prev_x = x_i[n,]
+      prev_y = y_est_i[n,]
+      prev_p = p_i[n]
+      prev_q = q_i[n]
+      prev_y_mod = y_mod_i[n,]
+    } else {accepted[n] = 0}
+    
+  }
+
+
+ # Check
+  print(paste0(n_iterations," iterations were run"))
+  print(paste0(sum(accepted==-1)," iterations did not run correctly"))
+  print(paste0(sum(accepted==1)," iterations were accepted"))
+  print(paste0(sum(accepted==1)/n_iterations*100,"% of iterations were accepted"))
+    # plot p and q for each iteration and 1:1 plot of p, q
+  par(mfrow=c(1,3))
+  plot(1:n_iterations,p_i,pch=4,col="blue",ylab="p")
+  points((1:n_iterations)[accepted==1],p_i[accepted==1],pch=4,col="red")
+  lines(1:n_iterations,rep(p,n_iterations),col="yellow") # Plot prior p also
+  legend("topleft", legend=c("prior","all solutions","accepted solutions"),col=c("yellow", "blue", "red"), lty=1, cex=0.5, pch=20)
+  plot(1:n_iterations,q_i,pch=4,col="blue",ylab="q")
+  points((1:n_iterations)[accepted==1],q_i[accepted==1],pch=4,col="red")
+  lines(1:n_iterations,rep(q,n_iterations),col="yellow") # Plot prior q also
+  plot(p_i,q_i,pch=4,col="blue",xlab="p",ylab="q")
+  points(p_i[accepted==1],q_i[accepted==1],pch=4,col="red")
+  points(p,q,pch=20,col="yellow")
+
+  p_post = c(mean(p_i[accepted==1]),sd(p_i[accepted==1]))
+  print(paste0("Posterior value of p: p = ",round(p_post[1],2)," +/- ",round(p_post[2],2)))
+  q_post = c(mean(q_i[accepted==1]),sd(q_i[accepted==1]))
+  print(paste0("Posterior value of q: q = ",round(q_post[1],2)," +/- ",round(q_post[2],2)))
+  print(paste0("p-q: Pearson correlation coefficient of  ",round(cor(p_i[accepted==1],q_i[accepted==1]),2)))
+
+
+  # plot x vs y, prior and post
+  x_post = apply(x_i[accepted==1,],2,mean)
+  x_post_sd = apply(x_i[accepted==1,],2,sd)
+  y_post = apply(y_est_i[accepted==1,],2,mean) 
+  y_post_sd = apply(y_est_i[accepted==1,],2,sd)
+  p_post = mean(p_i[accepted==1])
+  p_post_sd = sd(p_i[accepted==1])
+  q_post = mean(q_i[accepted==1])
+  q_post_sd = sd(q_i[accepted==1])
+  y_mod_post = test_model(x_post, p_post[1], q_post[1])
+
+  compare_post_prior(x,y_obs,y_mod,x_post,y_post,y_mod_post)
+
+  # Combine return values
+  res = list(x_post, x_post_sd, y_post, y_post_sd, p_post, p_post_sd, q_post, q_post_sd, y_mod_post)
+  return(res)
+}
 ```
 
 * Run the MCMC with step length of 0.5 and 10000 iterations, for the linear relationship between flux and growth described above. Use the estimates of slope and intercept from the linear fit as a starting point for the MCMC, and assign them both an uncertainty of 0.2. Assign the relative model uncertainty as 0.1.
